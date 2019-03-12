@@ -56,10 +56,16 @@ class Network(object):
         session: The current TensorFlow session
         ignore_missing: If true, serialized weights for missing layers are ignored.
         '''
-        data_dict = np.load(data_path).item()
+        #data_dict = np.load(data_path).item()
+        data_dict = np.load(data_path,encoding="latin1").item()    
+        #201903 加入encoding="latin1"
         for op_name in data_dict:
             with tf.variable_scope(op_name, reuse=True):
-                for param_name, data in data_dict[op_name].iteritems():
+            # 201903
+            #with tf.variable_scope(op_name, reuse=tf.AUTO_REUSE):
+                #for param_name, data in data_dict[op_name].iteritems():
+                #201903 Python3, AttributeError: 'dict' object has no attribute 'iteritems'
+                for param_name, data in data_dict[op_name].items():
                     try:
                         var = tf.get_variable(param_name)
                         session.run(var.assign(data))
@@ -74,7 +80,9 @@ class Network(object):
         assert len(args) != 0
         self.terminals = []
         for fed_layer in args:
-            if isinstance(fed_layer, basestring):
+            #if isinstance(fed_layer, basestring):
+            # 201903 for Python 3
+            if isinstance(fed_layer, str):
                 try:
                     fed_layer = self.layers[fed_layer]
                 except KeyError:
@@ -124,7 +132,12 @@ class Network(object):
         # Convolution for a given input and kernel
         convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
         with tf.variable_scope(name) as scope:
-            kernel = self.make_var('weights', shape=[k_h, k_w, c_i / group, c_o])
+        #no-201903 Variable conv1/weights already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
+        #with tf.variable_scope(name, reuse=True) as scope:
+            # 201903 unsupported operand type(s) for /: 'Dimension' and 'int'
+            var_temp = int(c_i)/group
+            kernel = self.make_var('weights', shape=[k_h, k_w, var_temp, c_o])
+            #kernel = self.make_var('weights', shape=[k_h, k_w, c_i / group, c_o])
             if group == 1:
                 # This is the common-case. Convolve the input without any further complications.
                 output = convolve(input, kernel)
@@ -186,6 +199,8 @@ class Network(object):
     @layer
     def fc(self, input, num_out, name, relu=True):
         with tf.variable_scope(name) as scope:
+        #no-201903 Variable cls1_fc1_pose/weights already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
+        #with tf.variable_scope(name, reuse=True) as scope:
             input_shape = input.get_shape()
             if input_shape.ndims == 4:
                 # The input is spatial. Vectorize it first.
@@ -217,6 +232,8 @@ class Network(object):
     @layer
     def batch_normalization(self, input, name, scale_offset=True, relu=False):
         # NOTE: Currently, only inference is supported
+        #no-201903 Variable conv1/weights already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
+        #with tf.variable_scope(name, reuse=True) as scope:
         with tf.variable_scope(name) as scope:
             shape = [input.get_shape()[-1]]
             if scale_offset:
