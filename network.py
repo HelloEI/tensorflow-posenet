@@ -101,9 +101,13 @@ class Network(object):
         ident = sum(t.startswith(prefix) for t, _ in self.layers.items()) + 1
         return '%s_%d' % (prefix, ident)
 
-    def make_var(self, name, shape):
-        '''Creates a new TensorFlow variable.'''
-        return tf.get_variable(name, shape, trainable=self.trainable)
+    #def make_var(self, name, shape):
+    #    '''Creates a new TensorFlow variable.'''
+    #    return tf.get_variable(name, shape, trainable=self.trainable)
+    #2019 此函数就是在tensorflow格式下建立变量
+    def make_var(self, name, shape, initializer=None):
+        return tf.get_variable(name, shape, initializer=initializer, trainable=self.trainable)
+    
 
     def validate_padding(self, padding):
         '''Verifies that the padding is one of the supported ones.'''
@@ -129,6 +133,10 @@ class Network(object):
         # Verify that the grouping parameter is valid
         assert c_i % group == 0
         assert c_o % group == 0
+
+        #2019
+        print (name, input.get_shape())
+
         # Convolution for a given input and kernel
         convolve = lambda i, k: tf.nn.conv2d(i, k, [1, s_h, s_w, 1], padding=padding)
         with tf.variable_scope(name) as scope:
@@ -136,7 +144,24 @@ class Network(object):
         #with tf.variable_scope(name, reuse=True) as scope:
             # 201903 unsupported operand type(s) for /: 'Dimension' and 'int'
             var_temp = int(c_i)/group
-            kernel = self.make_var('weights', shape=[k_h, k_w, var_temp, c_o])
+            
+            if (name=='conv1'):
+                #2019 采取截断是正态初始化权重，这只是一种initializer方法，mean=0,stddev=0.01
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.015)
+            elif (name == 'conv2'):
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.02)
+            elif (name=='icp1_out1' or name=='icp2_out1' or name=='icp3_out1' or name=='icp4_out1' or name=='icp5_out1' or name=='icp6_out1' or name=='icp7_out1' or name=='icp8_out1' or name=='icp9_out1'):
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.04)
+            elif (name=='icp1_out2' or name=='icp2_out2' or name=='icp3_out2' or name=='icp4_out2' or name=='icp5_out2' or name=='icp6_out2' or name=='icp7_out2' or name=='icp8_out2' or name=='icp9_out2'):
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.08)
+            else:
+                init_weights = tf.contrib.layers.xavier_initializer()
+            #2019 这也只是定义initializer的方法，初始化为0
+            init_biases = tf.constant_initializer(0.0)
+            
+            #kernel = self.make_var('weights', shape=[k_h, k_w, var_temp, c_o])
+            #2019
+            kernel = self.make_var('weights', shape=[k_h, k_w, var_temp, c_o], initializer=init_weights)
             #kernel = self.make_var('weights', shape=[k_h, k_w, c_i / group, c_o])
             if group == 1:
                 # This is the common-case. Convolve the input without any further complications.
@@ -150,7 +175,9 @@ class Network(object):
                 output = tf.concat(3, output_groups)
             # Add the biases
             if biased:
-                biases = self.make_var('biases', [c_o])
+                #biases = self.make_var('biases', [c_o])
+                #2019
+                biases = self.make_var('biases', [c_o], initializer=init_biases)
                 output = tf.nn.bias_add(output, biases)
             if relu:
                 # ReLU non-linearity
@@ -163,6 +190,9 @@ class Network(object):
 
     @layer
     def max_pool(self, input, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+        #2019
+        print (name, input.get_shape())
+
         self.validate_padding(padding)
         return tf.nn.max_pool(input,
                               ksize=[1, k_h, k_w, 1],
@@ -172,6 +202,9 @@ class Network(object):
 
     @layer
     def avg_pool(self, input, k_h, k_w, s_h, s_w, name, padding=DEFAULT_PADDING):
+        #2019
+        print (name, input.get_shape())
+        
         self.validate_padding(padding)
         return tf.nn.avg_pool(input,
                               ksize=[1, k_h, k_w, 1],
@@ -202,6 +235,10 @@ class Network(object):
         #no-201903 Variable cls1_fc1_pose/weights already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
         #with tf.variable_scope(name, reuse=True) as scope:
             input_shape = input.get_shape()
+
+            #2019
+            print (name, input.get_shape())
+
             if input_shape.ndims == 4:
                 # The input is spatial. Vectorize it first.
                 dim = 1
@@ -210,8 +247,19 @@ class Network(object):
                 feed_in = tf.reshape(input, [-1, dim])
             else:
                 feed_in, dim = (input, input_shape[-1].value)
-            weights = self.make_var('weights', shape=[dim, num_out])
-            biases = self.make_var('biases', [num_out])
+            
+            #2019 
+            if (name=='cls1_fc_pose_xyz' or name=='cls2_fc_pose_xyz' or name=='cls3_fc_pose_xyz'):
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.5)
+            else:    
+                init_weights = tf.truncated_normal_initializer(0.0, stddev=0.01)
+            #2019 这也只是定义initializer的方法，初始化为0
+            init_biases = tf.constant_initializer(0.0)
+            #2019 
+            weights = self.make_var('weights', shape=[dim, num_out], initializer=init_weights)
+            biases = self.make_var('biases', [num_out], initializer=init_biases)            
+            #weights = self.make_var('weights', shape=[dim, num_out])
+            #biases = self.make_var('biases', [num_out])
             op = tf.nn.relu_layer if relu else tf.nn.xw_plus_b
             fc = op(feed_in, weights, biases, name=scope.name)
             return fc

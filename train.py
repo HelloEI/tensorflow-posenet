@@ -2,19 +2,26 @@
 import numpy as np
 import random
 import tensorflow as tf
-from posenet import GoogLeNet as PoseNet
+#from posenet import GoogLeNet as PoseNet
 import cv2
 from tqdm import tqdm
+from vgg_pp import VGG16 as PoseNet_pp
 
 # 201903 Variable conv1/weights/Adam/ already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
 tf.reset_default_graph()
 
-batch_size = 75
+#batch_size = 75
+batch_size = 32
 max_iterations = 30000
+#max_iterations = 10000
+
 # Set this path to your dataset directory
 #directory = 'path_to_datasets/KingsCollege/'
-directory = 'E:/PoseNet/KingsCollege/'
-dataset = 'dataset_train.txt'
+#directory = 'E:/PoseNet/KingsCollege/'
+directory = 'E:/PoseNet/heads/'
+#directory = 'E:/PoseNet/ShopFacade/'
+#dataset = 'dataset_train.txt'
+dataset = 'heads_train.txt'
 
 class datasource(object):
     def __init__(self, images, poses):
@@ -126,24 +133,48 @@ def main():
     poses_q = tf.placeholder(tf.float32, [batch_size, 4])
     datasource = get_data()
 
-    net = PoseNet({'data': images})
+    #net = PoseNet({'data': images})
+#
+#    p1_x = net.layers['cls1_fc_pose_xyz']
+#    p1_q = net.layers['cls1_fc_pose_wpqr']
+#    p2_x = net.layers['cls2_fc_pose_xyz']
+#    p2_q = net.layers['cls2_fc_pose_wpqr']
+#    p3_x = net.layers['cls3_fc_pose_xyz']
+#    p3_q = net.layers['cls3_fc_pose_wpqr']
 
-    p1_x = net.layers['cls1_fc_pose_xyz']
-    p1_q = net.layers['cls1_fc_pose_wpqr']
-    p2_x = net.layers['cls2_fc_pose_xyz']
-    p2_q = net.layers['cls2_fc_pose_wpqr']
-    p3_x = net.layers['cls3_fc_pose_xyz']
-    p3_q = net.layers['cls3_fc_pose_wpqr']
+    #2019 
+    vgg_beta = 100
+    vgg_net = PoseNet_pp({'data': images})
+    vgg_x = vgg_net.layers['fc9_pose_xyz']
+    vgg_q = vgg_net.layers['fc9_pose_wpqr']
+    translation_loss = tf.sqrt(tf.nn.l2_loss(tf.subtract(vgg_x, poses_x)))
+    rotation_loss = tf.sqrt(tf.nn.l2_loss(tf.subtract(vgg_q, poses_q)))
+    vgg_loss = translation_loss + vgg_beta * rotation_loss
+    vgg_opt = tf.train.AdamOptimizer(learning_rate=0.00001, beta1=0.9, beta2=0.999, epsilon=0.00000001, use_locking=False, name='Adam').minimize(vgg_loss)
+    
+    #2019 
+    #beta = 500
+    beta = 500
+#    l1_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p1_x, poses_x)))) * 0.3
+    #2019 l1_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p1_q, poses_q)))) * 150
+#    l1_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p1_q, poses_q)))) * beta*0.3
+#    l2_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p2_x, poses_x)))) * 0.3
+    #2019 l2_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p2_q, poses_q)))) * 150
+#    l2_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p2_q, poses_q)))) * beta*0.3
+#    l3_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p3_x, poses_x)))) * 1
+#    l3_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p3_q, poses_q)))) * beta
 
-    l1_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p1_x, poses_x)))) * 0.3
-    l1_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p1_q, poses_q)))) * 150
-    l2_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p2_x, poses_x)))) * 0.3
-    l2_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p2_q, poses_q)))) * 150
-    l3_x = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p3_x, poses_x)))) * 1
-    l3_q = tf.sqrt(tf.reduce_sum(tf.square(tf.subtract(p3_q, poses_q)))) * 500
-
-    loss = l1_x + l1_q + l2_x + l2_q + l3_x + l3_q
-    opt = tf.train.AdamOptimizer(learning_rate=0.0001, beta1=0.9, beta2=0.999, epsilon=0.00000001, use_locking=False, name='Adam').minimize(loss)
+#    loss = l1_x + l1_q + l2_x + l2_q + l3_x + l3_q
+    #opt = tf.train.AdamOptimizer(learning_rate=0.0001, beta1=0.9, beta2=0.999, epsilon=0.00000001, use_locking=False, name='Adam').minimize(loss)
+    # 201904 from paper?
+#    opt = tf.train.AdamOptimizer(learning_rate=0.00001, beta1=0.9, beta2=0.999, epsilon=0.00000001, use_locking=False, name='Adam').minimize(loss)
+    #opt = tf.train.AdagradOptimizer(learning_rate=0.0001,initial_accumulator_value=0.1,use_locking=False,name='Adagrad').minimize(loss)
+    #opt = tf.train.MomentumOptimizer(learning_rate=0.0001, momentum=0.9,use_locking=False,name='Momentum',use_nesterov=False).minimize(loss)
+    # # MyAdamW is a new class
+    #MyAdamW = tf.contrib.opt.extend_with_decoupled_weight_decay(tf.train.AdamOptimizer)
+    ## Create a MyAdamW object
+    #opt = MyAdamW(weight_decay=0.5, learning_rate=0.0001, beta1=0.9, beta2=0.999, epsilon=0.00000001, use_locking=False).minimize(loss)
+    # sess.run(optimizer.minimize(loss, decay_variables=[var1, var2]))
 
     # Set GPU options
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6833)
@@ -152,29 +183,38 @@ def main():
     saver = tf.train.Saver()
     #outputFile = "PoseNet.ckpt"
     #201903 ValueError: Parent directory of PoseNet.ckpt doesn't exist, can't save.
-    outputFile = "E:\PoseNet\PoseNet.ckpt"
+    outputFile = "PoseNet_scenes7-heads-vgg01.ckpt"
+    #outputFile = "PoseNet_KC-v05.ckpt"
+    path = "E:/PoseNet/trained_model/scenes7_heads/"
+    #path = "E:/PoseNet/trained_model/KC/"
 
     with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         # Load the data
         sess.run(init)
         #net.load('posenet.npy', sess)
         # 201903 changed
-        net.load('../weights/posenet.npy', sess)
+#        net.load('C:\\Users\\iambx\\Documents\\code_AnacondaProjects\\Github-py3_PoseNet_Tensorflow\\weights\\posenet.npy', sess)
+        # 2019 for coninue training
+        #saver.restore(sess, path + 'PoseNet_KC-v01.ckpt')
 
         data_gen = gen_data_batch(datasource)
         for i in range(max_iterations):
             np_images, np_poses_x, np_poses_q = next(data_gen)
             feed = {images: np_images, poses_x: np_poses_x, poses_q: np_poses_q}
 
-            sess.run(opt, feed_dict=feed)
-            np_loss = sess.run(loss, feed_dict=feed)
+            sess.run(vgg_opt, feed_dict=feed)
+            np_loss = sess.run(vgg_loss, feed_dict=feed)
+            #loss_dx, loss_dq = sess.run([l3_x, l3_q], feed_dict=feed)
+            loss_dx, loss_dq = sess.run([translation_loss, rotation_loss], feed_dict=feed)
             if i % 20 == 0:
                 print("iteration: " + str(i) + "\n\t" + "Loss is: " + str(np_loss))
+                print ("m:", loss_dx)
+                print ("degree: ", loss_dq)
             if i % 5000 == 0:
-                saver.save(sess, outputFile)
-                print("Intermediate file saved at: " + outputFile)
-        saver.save(sess, outputFile)
-        print("Intermediate file saved at: " + outputFile)
+                saver.save(sess, path + outputFile)
+                print("Intermediate file saved at: " + path + outputFile)
+        saver.save(sess, path + outputFile)
+        print("Intermediate file saved at: " + path + outputFile)
 
 
 if __name__ == '__main__':

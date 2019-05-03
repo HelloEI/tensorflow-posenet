@@ -11,17 +11,22 @@ import math
 # 201903 Variable conv1/weights/Adam/ already exists, disallowed. Did you mean to set reuse=True or reuse=tf.AUTO_REUSE in VarScope? Originally defined at:
 tf.reset_default_graph()
 
-batch_size = 75
+#batch_size = 75
+batch_size = 64
 max_iterations = 30000
 
 # Set this path to your project directory
 #path = 'path_to_project/'
-path = 'E:/PoseNet/weights_KCTensorflow/'
+#path = 'E:/PoseNet/weights_KCTensorflow/'
+path = 'E:/PoseNet/trained_model/scenes7_heads/'
+#path = 'E:/PoseNet/trained_model/KC/'
+
 # Set this path to your dataset directory
 #directory = 'path_to_datasets/KingsCollege/'
 #dataset = 'dataset_test.txt'
-directory = 'E:/PoseNet/KingsCollege/'
-dataset = 'dataset_test.txt'
+#directory = 'E:/PoseNet/KingsCollege/'
+directory = 'E:/PoseNet/heads/'
+dataset = 'heads_val.txt'
 
 class datasource(object):
     def __init__(self, images, poses):
@@ -147,7 +152,7 @@ def main():
     with tf.Session() as sess:
         # Load the data
         sess.run(init)
-        saver.restore(sess, path + 'PoseNet.ckpt')
+        saver.restore(sess, path + 'PoseNet_scenes7-heads-v02.ckpt')
 
         data_gen = gen_data_batch(datasource)
         for i in range(len(datasource.images)):
@@ -157,6 +162,7 @@ def main():
 
             pose_q= np.asarray(datasource.poses[i][3:7])
             pose_x= np.asarray(datasource.poses[i][0:3])
+            #print (pose_x)
             predicted_x, predicted_q = sess.run([p3_x, p3_q], feed_dict=feed)
 
             pose_q = np.squeeze(pose_q)
